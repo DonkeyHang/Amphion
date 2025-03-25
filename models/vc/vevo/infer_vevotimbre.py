@@ -9,18 +9,30 @@ from huggingface_hub import snapshot_download
 from models.vc.vevo.vevo_utils import *
 
 
-def vevo_timbre(content_wav_path, reference_wav_path, output_path):
-    gen_audio = inference_pipeline.inference_fm(
-        src_wav_path=content_wav_path,
-        timbre_ref_wav_path=reference_wav_path,
-        flow_matching_steps=32,
-    )
-    save_audio(gen_audio, output_path=output_path)
+def test_timbreInfer():
+        # ===== Device =====
+    # device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    # device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
+    device = torch.device("cpu")
+    print("now device is : ", device)
+    print("check point 1")
 
 
-if __name__ == "__main__":
-    # ===== Device =====
-    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    # ========== function inference pipeline=============
+    def vevo_timbre(content_wav_path, reference_wav_path, output_path):
+        print("check point 7")
+        gen_audio = inference_pipeline.inference_fm(
+            src_wav_path=content_wav_path,
+            timbre_ref_wav_path=reference_wav_path,
+            flow_matching_steps=32,
+        )
+        print("check point 8")
+        save_audio(gen_audio, output_path=output_path)
+        print("check point 9")
+    #==================================
+
+
+
 
     # ===== Content-Style Tokenizer =====
     local_dir = snapshot_download(
@@ -30,6 +42,7 @@ if __name__ == "__main__":
         allow_patterns=["tokenizer/vq8192/*"],
     )
     tokenizer_ckpt_path = os.path.join(local_dir, "tokenizer/vq8192")
+    print("check point 2")
 
     # ===== Flow Matching Transformer =====
     local_dir = snapshot_download(
@@ -41,6 +54,7 @@ if __name__ == "__main__":
 
     fmt_cfg_path = "./models/vc/vevo/config/Vq8192ToMels.json"
     fmt_ckpt_path = os.path.join(local_dir, "acoustic_modeling/Vq8192ToMels")
+    print("check point 3")
 
     # ===== Vocoder =====
     local_dir = snapshot_download(
@@ -52,6 +66,7 @@ if __name__ == "__main__":
 
     vocoder_cfg_path = "./models/vc/vevo/config/Vocoder.json"
     vocoder_ckpt_path = os.path.join(local_dir, "acoustic_modeling/Vocoder")
+    print("check point 4")
 
     # ===== Inference =====
     inference_pipeline = VevoInferencePipeline(
@@ -62,9 +77,14 @@ if __name__ == "__main__":
         vocoder_ckpt_path=vocoder_ckpt_path,
         device=device,
     )
+    print("check point 5")
 
-    content_wav_path = "./models/vc/vevo/wav/source.wav"
-    reference_wav_path = "./models/vc/vevo/wav/arabic_male.wav"
-    output_path = "./models/vc/vevo/wav/output_vevotimbre.wav"
+    content_wav_path = "./models/vc/vevo/wav/arabic_male.wav"
+    reference_wav_path = "./models/vc/vevo/wav/english_female.wav"
+    output_path = "./models/vc/vevo/wav/output_arabicM_to_englishW.wav"
+    print("check point 6")
 
     vevo_timbre(content_wav_path, reference_wav_path, output_path)
+    print("check point finished!!!")
+
+

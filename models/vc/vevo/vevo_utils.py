@@ -91,7 +91,9 @@ def build_ar_model(cfg, device):
 
 # Flow Matching Transformer
 def build_fmt_model(cfg, device):
+    print("check point 30")
     model = FlowMatchingTransformer(cfg=cfg.model.flow_matching_transformer)
+    print("check point 31")
     model.eval()
     model.to(device)
     return model
@@ -122,8 +124,11 @@ def build_vocoder_model(cfg, device):
 
 
 def load_checkpoint(build_model_func, cfg, ckpt_path, device):
+    print("check point 20")
     model = build_model_func(cfg, device)
+    print("check point 21")
     accelerate.load_checkpoint_and_dispatch(model, ckpt_path)
+    print("check point 22")
     return model
 
 
@@ -187,6 +192,8 @@ class VevoInferencePipeline:
     ):
         self.device = device
 
+        print("check point 11")
+
         if ar_cfg_path is not None and ar_ckpt_path is not None:
             self.ar_cfg = load_config(ar_cfg_path)
             self.ar_model = load_checkpoint(
@@ -197,11 +204,16 @@ class VevoInferencePipeline:
             self.ar_cfg = None
             self.ar_model = None
 
+        print("check point 12")
+
         self.fmt_cfg = load_config(fmt_cfg_path)
+        print("check point 13")
         self.fmt_model = load_checkpoint(
             build_fmt_model, self.fmt_cfg, fmt_ckpt_path, device
         )
+        print("check point 14")
         print(f"#Params of Flow Matching model: {count_parameters(self.fmt_model)}")
+        
 
         self.vocoder_cfg = load_config(vocoder_cfg_path)
         self.mel_model = build_mel_model(self.vocoder_cfg, device)

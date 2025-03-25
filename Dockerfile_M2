@@ -1,0 +1,52 @@
+# 修改为适合ARM架构的基础镜像
+FROM --platform=linux/arm64 ubuntu:18.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG PYTORCH='2.0.0'
+ARG SHELL='/bin/bash'
+ARG MINICONDA='Miniconda3-py39_23.3.1-0-Linux-aarch64.sh'  # 更换为ARM架构版本
+
+ENV LANG=en_US.UTF-8 PYTHONIOENCODING=utf-8 PYTHONDONTWRITEBYTECODE=1
+ENV PATH=/opt/conda/bin:$PATH \
+    LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH \
+    CONDA_PREFIX=/opt/conda \
+    SHELL=${SHELL}
+
+# 替换为国内镜像源并安装基础依赖
+RUN sed -i 's/archive.ubuntu.com/mirrors.cloud.tencent.com/g' /etc/apt/sources.list \
+    && sed -i 's/security.ubuntu.com/mirrors.cloud.tencent.com/g' /etc/apt/sources.list \
+    && apt-get update \
+    && apt-get -y install \
+    python3-pip ffmpeg git less wget libsm6 libxext6 libxrender-dev \
+    build-essential cmake pkg-config libx11-dev libatlas-base-dev \
+    libgtk-3-dev libboost-python-dev vim libgl1-mesa-glx \
+    libaio-dev software-properties-common tmux \
+    espeak-ng libopenblas-dev ocl-icd-opencl-dev  # 添加ARM优化依赖
+
+# 安装ARM架构的Miniconda
+RUN wget -t 0 -c -O /tmp/anaconda.sh https://repo.anaconda.com/miniconda/${MINICONDA} \
+    && bash /tmp/anaconda.sh -b -p /opt/conda \
+    && rm /tmp/anaconda.sh
+
+# 创建Python环境
+RUN conda create -y --name amphion python=3.9.15
+
+WORKDIR /app
+COPY env.sh env.sh
+RUN chmod +x ./env.sh
+
+# 安装PyTorch的ARM兼容版本（使用苹果Metal加速）
+RUN sed -i 's/torch==.*/torch>=2.0.0/g' env.sh \
+    && sed -i 's/torchvision==.*/torchvision>=0.15.0/g' env.sh \
+    && conda run -n amphion pip install \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    torch torchvision torchaudio
+
+# 安装其他依赖
+RUN ["conda", "run", "-n", "amphion", "-vvv", "--no-capture-output", "./env.sh"]
+
+# 配置环境
+RUN conda init \
+    && echo "\nconda activate amphion\n" >> ~/.bashrc
+
+CMD ["/bin/bash"]
