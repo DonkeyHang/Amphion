@@ -27,6 +27,7 @@ class FlowMatchingTransformer(nn.Module):
         cfg=None,
     ):
         super().__init__()
+        print("check point FlowMatchingTransformer 1")
         self.cfg = cfg
 
         mel_dim = (
@@ -77,17 +78,17 @@ class FlowMatchingTransformer(nn.Module):
             else cond_scale_factor
         )
 
-        self.mel_dim = mel_dim
+        self.mel_dim = mel_dim#mel的维度
         self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        self.num_heads = num_heads
-        self.cfg_scale = cfg_scale
-        self.use_cond_code = use_cond_code
-        self.cond_codebook_size = cond_codebook_size
+        self.num_layers = num_layers#Transformer层的数量
+        self.num_heads = num_heads#多头注意力的数量
+        self.cfg_scale = cfg_scale#无分类器引导缩放因子
+        self.use_cond_code = use_cond_code#离散token条件
+        self.cond_codebook_size = cond_codebook_size#条件token词汇表大小（8192）
         self.cond_dim = cond_dim
         self.time_scheduler = time_scheduler
-        self.sigma = sigma
-        self.cond_scale_factor = cond_scale_factor
+        self.sigma = sigma#扩散中噪声参数
+        self.cond_scale_factor = cond_scale_factor#时间步调度方式
 
         if self.use_cond_code:
             self.cond_emb = nn.Embedding(cond_codebook_size, self.hidden_size)
@@ -95,6 +96,8 @@ class FlowMatchingTransformer(nn.Module):
             self.cond_emb = nn.Linear(self.cond_dim, self.hidden_size)
 
         self.reset_parameters()
+
+        print("check point FlowMatchingTransformer 2")
 
         self.diff_estimator = DiffLlama(
             mel_dim=mel_dim,
@@ -104,6 +107,7 @@ class FlowMatchingTransformer(nn.Module):
         )
 
         self.sigma = sigma
+        print("check point FlowMatchingTransformer 3")
 
     @torch.no_grad()
     def forward_diffusion(self, x, t):
