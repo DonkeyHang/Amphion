@@ -91,11 +91,12 @@ def build_ar_model(cfg, device):
 
 # Flow Matching Transformer
 def build_fmt_model(cfg, device):
-    print("check point 30")
+    print("check point build_fmt_model 1")
     model = FlowMatchingTransformer(cfg=cfg.model.flow_matching_transformer)
-    print("check point 31")
+    print("check point build_fmt_model 2")
     model.eval()
     model.to(device)
+    print("check point build_fmt_model 3")
     return model
 
 
@@ -124,11 +125,11 @@ def build_vocoder_model(cfg, device):
 
 
 def load_checkpoint(build_model_func, cfg, ckpt_path, device):
-    print("check point 20")
+    print("check point load_checkpoint 20")
     model = build_model_func(cfg, device)
-    print("check point 21")
+    print("check point load_checkpoint 21")
     accelerate.load_checkpoint_and_dispatch(model, ckpt_path)
-    print("check point 22")
+    print("check point load_checkpoint 22")
     return model
 
 
@@ -192,7 +193,7 @@ class VevoInferencePipeline:
     ):
         self.device = device
 
-        print("check point 11")
+        print("check point VevoInferencePipeline 1")
 
         if ar_cfg_path is not None and ar_ckpt_path is not None:
             self.ar_cfg = load_config(ar_cfg_path)
@@ -204,14 +205,14 @@ class VevoInferencePipeline:
             self.ar_cfg = None
             self.ar_model = None
 
-        print("check point 12")
+        print("check point VevoInferencePipeline 2")
 
         self.fmt_cfg = load_config(fmt_cfg_path)
-        print("check point 13")
+        print("check point VevoInferencePipeline 3")
         self.fmt_model = load_checkpoint(
             build_fmt_model, self.fmt_cfg, fmt_ckpt_path, device
         )
-        print("check point 14")
+        print("check point VevoInferencePipeline 4")
         print(f"#Params of Flow Matching model: {count_parameters(self.fmt_model)}")
         
 
@@ -221,10 +222,12 @@ class VevoInferencePipeline:
             build_vocoder_model, self.vocoder_cfg, vocoder_ckpt_path, device
         )
         print(f"#Params of Vocoder model: {count_parameters(self.vocoder_model)}")
+        print("check point VevoInferencePipeline 5")
 
         self.content_tokenizer_ckpt_path = content_tokenizer_ckpt_path
         self.content_style_tokenizer_ckpt_path = content_style_tokenizer_ckpt_path
         self.init_vqvae_tokenizer()
+        print("check point VevoInferencePipeline 6")
 
     def init_vqvae_tokenizer(self):
         ## HuBERT features extraction ##
@@ -260,6 +263,7 @@ class VevoInferencePipeline:
             "pretrained_path",
             self.content_style_tokenizer_ckpt_path,
         )
+        #vqvae模型初始化
         self.content_style_tokenizer = load_checkpoint(
             build_vqvae_model,
             self.fmt_cfg.model.repcodec,
@@ -312,7 +316,7 @@ class VevoInferencePipeline:
         feats, feat_lengths = self.hubert_model.extract_features(
             wavs, lengths=wav_lens, num_layers=output_layer
         )
-        feats = feats[-1]
+        feats = feats[-1] #使用最后一层的特征（通常是第18层）
         return feats, feat_lengths
 
     def duration_reduction_func(self, token_seq, n_gram=1):
@@ -355,8 +359,8 @@ class VevoInferencePipeline:
         if token_type == "hubert_codec":
             feats = (
                 feats - self.hubert_feat_norm_mean.to(feats)
-            ) / self.hubert_feat_norm_std.to(feats)
-            codecs, _ = vqvae_model.quantize(feats)  # (B, T)
+            ) / self.hubert_feat_norm_std.to(feats) # 特征标准化部分
+            codecs, _ = vqvae_model.quantize(feats)  #RepCodec量化 #(B, T)
         elif token_type == "hubert_vevo_codec":
             x = vqvae_model.encoder(feats.transpose(1, 2))
             z = vqvae_model.projector(x)
@@ -606,12 +610,15 @@ class VevoInferencePipeline:
                 print("-" * 20)
 
         ## Diffusion ##
+        #从原音频中提取内容token
         src_hubert_codecs, _ = self.extract_hubert_codec(
             self.content_style_tokenizer, src_speech16k, duration_reduction=False
         )
+        #从参考音色中提取音色token
         timbre_ref_hubert_codecs, _ = self.extract_hubert_codec(
             self.content_style_tokenizer, timbre_ref_speech16k, duration_reduction=False
         )
+        #组合token用于FLowMatching模型的条件输入
         diffusion_input_codecs = torch.cat(
             [timbre_ref_hubert_codecs, src_hubert_codecs], dim=1
         )

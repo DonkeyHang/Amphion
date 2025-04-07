@@ -66,7 +66,7 @@ class VectorQuantize(nn.Module):
             - 2 * flatten @ self.embed
             + self.embed.pow(2).sum(0, keepdim=True)
         )
-        _, embed_ind = (-dist).max(1)
+        _, embed_ind = (-dist).max(1)   #找到最近的编码
         embed_onehot = F.one_hot(embed_ind, self.n_embed).type(dtype)
         embed_ind = embed_ind.view(*input.shape[:-1])
         quantize = F.embedding(embed_ind, self.embed.transpose(0, 1))
@@ -169,9 +169,9 @@ class ResidualVQ(nn.Module):
 class Quantizer(nn.Module):
     def __init__(
         self,
-        code_dim: int,
-        codebook_num: int,
-        codebook_size: int,
+        code_dim: int,      #编码维度
+        codebook_num: int,  #codebook数量
+        codebook_size: int, #每个codebook的大小
     ):
         super().__init__()
         self.codebook = ResidualVQ(
@@ -526,13 +526,13 @@ class Decoder(nn.Module):
 class VevoRepCodec(nn.Module):
     def __init__(
         self,
-        input_channels=768,
+        input_channels=768,     # Hubert特征维度
         output_channels=768,
         encode_channels=768,
         decode_channels=768,
         code_dim=768,
-        codebook_num=1,
-        codebook_size=1024,
+        codebook_num=1,         #使用codebook数量
+        codebook_size=1024,     #每个codebook的大小
         bias=True,
         enc_ratios=(1, 1),
         dec_ratios=(1, 1),
