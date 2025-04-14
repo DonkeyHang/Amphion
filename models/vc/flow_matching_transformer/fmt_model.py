@@ -88,7 +88,7 @@ class FlowMatchingTransformer(nn.Module):
         self.cond_dim = cond_dim
         self.time_scheduler = time_scheduler
         self.sigma = sigma#扩散中噪声参数
-        self.cond_scale_factor = cond_scale_factor#时间步调度方式
+        self.cond_scale_factor = cond_scale_factor
 
         if self.use_cond_code:
             self.cond_emb = nn.Embedding(cond_codebook_size, self.hidden_size)

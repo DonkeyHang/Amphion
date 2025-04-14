@@ -81,7 +81,7 @@ def test_timbreInfer():
 
     content_wav_path = "./models/vc/vevo/wav/arabic_male.wav"
     reference_wav_path = "./models/vc/vevo/wav/english_female.wav"
-    output_path = "./models/vc/vevo/wav/output_arabicM_to_englishW.wav"
+    output_path = "./models/vc/vevo/wav/output_vevotimbre_arabicM_to_englishW.wav"
     print("check point test_timbreInfer 6")
 
     # vevo_timbre(content_wav_path, reference_wav_path, output_path)

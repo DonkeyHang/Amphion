@@ -9,19 +9,13 @@ from huggingface_hub import snapshot_download
 from models.vc.vevo.vevo_utils import *
 
 
-def vevo_style(content_wav_path, style_wav_path, output_path):
-    gen_audio = inference_pipeline.inference_ar_and_fm(
-        src_wav_path=content_wav_path,
-        src_text=None,
-        style_ref_wav_path=style_wav_path,
-        timbre_ref_wav_path=content_wav_path,
-    )
-    save_audio(gen_audio, output_path=output_path)
+def test_styleInfer():
 
-
-if __name__ == "__main__":
     # ===== Device =====
-    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    # device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    device = torch.device("cpu")
+    print("now device is : ", device)
+
 
     # ===== Content Tokenizer =====
     local_dir = snapshot_download(
@@ -89,8 +83,27 @@ if __name__ == "__main__":
         device=device,
     )
 
-    content_wav_path = "./models/vc/vevo/wav/source.wav"
-    reference_wav_path = "./models/vc/vevo/wav/arabic_male.wav"
-    output_path = "./models/vc/vevo/wav/output_vevostyle.wav"
+    # content_wav_path = "./models/vc/vevo/wav/source.wav"
+    # reference_wav_path = "./models/vc/vevo/wav/arabic_male.wav"
+    # output_path = "./models/vc/vevo/wav/output_vevostyle.wav"
+    content_wav_path = "./models/vc/vevo/wav/arabic_male.wav"
+    reference_wav_path = "./models/vc/vevo/wav/mandarin_female.wav"
+    output_path = "./models/vc/vevo/wav/output_vevostyle_arabicM_to_mandarinW.wav"
+
+
+    #========= run vevo_style =========
+    def vevo_style(content_wav_path, style_wav_path, output_path):
+        gen_audio = inference_pipeline.inference_ar_and_fm(
+            src_wav_path=content_wav_path,
+            src_text=None,
+            style_ref_wav_path=style_wav_path,
+            timbre_ref_wav_path=content_wav_path,
+        )
+        save_audio(gen_audio, output_path=output_path)
+
 
     vevo_style(content_wav_path, reference_wav_path, output_path)
+
+
+# if __name__ == "__main__":
+

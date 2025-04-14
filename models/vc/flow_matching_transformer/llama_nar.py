@@ -94,16 +94,16 @@ class LlamaNARDecoderLayer(LlamaDecoderLayer):#非自回归解码器层
         """
         #残差链接
         residual = hidden_states
-        #归一化
+        #归一化，使用扩散时间步作为条件的自适应归一化
         hidden_states = self.input_layernorm(
             hidden_states, cond_embedding=cond_embedding
         )
 
-        # Self Attention
+        # Self Attention - 关键的非自回归处理在这里操作
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
+            attention_mask=attention_mask,#注意掩码的处理
+            position_ids=position_ids,#位置IDs用于旋转位置编码
             past_key_value=past_key_value,
             output_attentions=output_attentions,
             use_cache=use_cache,
@@ -199,6 +199,7 @@ class DiffLlama(LlamaModel):
 
         # self.reset_parameters()
 
+    #非自回归，允许每个位置特征“看到”序列中所有其余的位置
     def _prepare_decoder_attention_mask(
         self, attention_mask, input_shape, inputs_embeds, past_key_values_length
     ):
@@ -258,10 +259,10 @@ class DiffLlama(LlamaModel):
         # retrieve some shape info
         batch_size, seq_length, _ = x.shape
 
-        # condtion mlp / 条件特征处理
+        # condtion mlp / 整个条件特征处理
         cond_embedding = self.cond_mlp(cond)  # (B, T, C)
 
-        # condition mel / 梅尔频谱特征投影
+        # condition mel / 整个梅尔频谱特征投影
         x = self.mel_mlp(x)
 
         # diffusion step embedding / 扩散时间步嵌入
@@ -344,7 +345,7 @@ class DiffLlama(LlamaModel):
             if self.gradient_checkpointing and self.training:
                 raise NotImplementedError
 
-            else:
+            else:#每层都一次性处理整个序列
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,

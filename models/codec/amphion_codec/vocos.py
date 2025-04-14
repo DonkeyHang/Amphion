@@ -770,13 +770,15 @@ class VocosBackbone(Backbone):
 
     def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
         bandwidth_id = kwargs.get("bandwidth_id", None)
-        x = self.embed(x)
+        x = self.embed(x)#初始提取特征
+        #归一化处理
         if self.adanorm:
             assert bandwidth_id is not None
             x = self.norm(x.transpose(1, 2), cond_embedding_id=bandwidth_id)
         else:
             x = self.norm(x.transpose(1, 2))
         x = x.transpose(1, 2)
+        #通过多个ConvNeXt块处理
         for conv_block in self.convnext:
             x = conv_block(x, cond_embedding_id=bandwidth_id)
         x = self.final_layer_norm(x.transpose(1, 2))

@@ -300,7 +300,7 @@ class VevoInferencePipeline:
         )
         return mel_feature
 
-    @torch.no_grad()
+    @torch.no_grad()#HuBERT特征提取
     def extract_hubert_feature(self, wavs, wav_lens=None, output_layer=18):
         """
         Args:
@@ -334,10 +334,10 @@ class VevoInferencePipeline:
         )
         return reduced_token_seq, len(reduced_token_seq)
 
-    @torch.no_grad()
+    @torch.no_grad()#HuBERT编码提取（输入vqvae模型、wav）
     def extract_hubert_codec(
         self,
-        vqvae_model,
+        vqvae_model,#vqvae模型
         wavs,
         wav_lens=None,
         output_layer=18,

@@ -7,7 +7,9 @@ import re
 import os
 from typing import List, Pattern, Union
 from phonemizer.utils import list2str, str2list
-from phonemizer.backend import EspeakBackend
+# 使用我们的模拟EspeakBackend
+from mock_espeak import MockEspeakBackend as EspeakBackend
+# 导入LanguageSwitch的模拟版本
 from phonemizer.backend.espeak.language_switch import LanguageSwitch
 from phonemizer.backend.espeak.words_mismatch import WordMismatch
 from phonemizer.punctuation import Punctuation

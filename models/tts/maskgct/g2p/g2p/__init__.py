@@ -6,10 +6,9 @@
 from models.tts.maskgct.g2p.g2p import cleaners
 from tokenizers import Tokenizer
 from models.tts.maskgct.g2p.g2p.text_tokenizers import TextTokenizer
-import LangSegment
+import LangSegment.LangSegment as LangSegment
 import json
 import re
-
 
 class PhonemeBpeTokenizer:
 

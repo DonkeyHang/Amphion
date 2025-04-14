@@ -95,6 +95,7 @@ class RepCodec(nn.Module):
         self.num_quantizers = num_quantizers
         self.downsample_scale = downsample_scale
 
+        #可选的下采样层
         if self.downsample_scale != None and self.downsample_scale > 1:
             self.down = nn.Conv1d(
                 self.hidden_size, self.hidden_size, kernel_size=3, stride=2, padding=1
@@ -103,7 +104,7 @@ class RepCodec(nn.Module):
                 self.hidden_size, self.hidden_size, kernel_size=3, stride=1, padding=1
             )
 
-        self.encoder = nn.Sequential(
+        self.encoder = nn.Sequential(#encoder
             VocosBackbone(
                 input_channels=self.hidden_size,
                 dim=self.vocos_dim,
@@ -113,7 +114,7 @@ class RepCodec(nn.Module):
             ),
             nn.Linear(self.vocos_dim, self.hidden_size),
         )
-        self.decoder = nn.Sequential(
+        self.decoder = nn.Sequential(#decoder
             VocosBackbone(
                 input_channels=self.hidden_size,
                 dim=self.vocos_dim,
@@ -124,7 +125,7 @@ class RepCodec(nn.Module):
             nn.Linear(self.vocos_dim, self.hidden_size),
         )
 
-        self.quantizer = ResidualVQ(
+        self.quantizer = ResidualVQ(#quantizer
             input_dim=hidden_size,
             num_quantizers=num_quantizers,
             codebook_size=codebook_size,
@@ -139,6 +140,8 @@ class RepCodec(nn.Module):
         self.reset_parameters()
 
     def forward(self, x):
+        # 整个流程
+        # downsample -> encoder -> quantizer -> decoder -> upsample
 
         # downsample
         if self.downsample_scale != None and self.downsample_scale > 1:
@@ -174,13 +177,16 @@ class RepCodec(nn.Module):
         return x_rec, codebook_loss, all_indices
 
     def quantize(self, x):
+        # downsample -> encoder -> quantizer
 
+        #下采样
         if self.downsample_scale != None and self.downsample_scale > 1:
             x = x.transpose(1, 2)
             x = self.down(x)
             x = F.gelu(x)
             x = x.transpose(1, 2)
 
+        #encoder
         x = self.encoder(x.transpose(1, 2)).transpose(1, 2)
 
         (
@@ -189,7 +195,7 @@ class RepCodec(nn.Module):
             all_commit_losses,
             all_codebook_losses,
             _,
-        ) = self.quantizer(x)
+        ) = self.quantizer(x)#quantizer
 
         if all_indices.shape[0] == 1:
             return all_indices.squeeze(0), quantized_out.transpose(1, 2)
@@ -199,7 +205,7 @@ class RepCodec(nn.Module):
         self.apply(init_weights)
 
 
-if __name__ == "__main__":
+def test_RepCodec():
     repcodec = RepCodec(vocos_dim=1024, downsample_scale=2)
     print(repcodec)
     print(sum(p.numel() for p in repcodec.parameters()) / 1e6)
@@ -208,3 +214,15 @@ if __name__ == "__main__":
     print(x_rec.shape, codebook_loss, all_indices.shape)
     vq_id, emb = repcodec.quantize(x)
     print(vq_id.shape, emb.shape)
+
+
+
+# if __name__ == "__main__":
+#     repcodec = RepCodec(vocos_dim=1024, downsample_scale=2)
+#     print(repcodec)
+#     print(sum(p.numel() for p in repcodec.parameters()) / 1e6)
+#     x = torch.randn(5, 10, 1024)
+#     x_rec, codebook_loss, all_indices = repcodec(x)
+#     print(x_rec.shape, codebook_loss, all_indices.shape)
+#     vq_id, emb = repcodec.quantize(x)
+#     print(vq_id.shape, emb.shape)

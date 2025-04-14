@@ -3,7 +3,8 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from phonemizer.backend import EspeakBackend
+# 使用我们的模拟EspeakBackend替代真实的依赖
+from mock_espeak import MockEspeakBackend as EspeakBackend
 from phonemizer.separator import Separator
 from phonemizer.utils import list2str, str2list
 from typing import List, Union
