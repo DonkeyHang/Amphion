@@ -72,6 +72,7 @@ def test_ttsInfer():
         device=device,
     )
 
+    # 恢复原始长文本
     src_text = "I don't really care what you call me. I've been a silent spectator, watching species evolve, empires rise and fall. But always remember, I am mighty and enduring. Respect me and I'll nurture you; ignore me and you shall face the consequences."
 
     ref_wav_path = "./models/vc/vevo/wav/arabic_male.wav"
@@ -119,7 +120,7 @@ def test_ttsInfer():
     vevo_tts(
         src_text,
         ref_wav_path,
-        timbre_ref_wav_path="./models/vc/vevo/wav/mandarin_female.wav",
+        timbre_ref_wav_path="./models/vc/vevo/wav/english_female.wav",
         output_path="./models/vc/vevo/wav/output_vevotts2.wav",
         ref_text=ref_text,
         src_language="en",
@@ -130,4 +131,3 @@ def test_ttsInfer():
 
 
 # if __name__ == "__main__":
-

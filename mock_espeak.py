@@ -59,7 +59,7 @@ class MockEspeakBackend:
         # 简单地将每个字符替换为有效的词元
         # 从前几个可用词元中选择，确保生成的词元在token字典中存在
         result = []
-        for i, char in enumerate(text[:20]):  # 限制处理字符数量
+        for i, char in enumerate(text):  # 移除字符数量限制
             # 根据字符选择音素词元
             token_index = ord(char) % len(self.tokens)
             result.append(self.tokens[token_index])

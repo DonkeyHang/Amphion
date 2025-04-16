@@ -245,7 +245,7 @@ class AutoregressiveTransformer(nn.Module):
         top_k=50,
         top_p=0.9,
         repeat_penalty=1.0,
-        min_new_tokens=50,
+        min_new_tokens=200,  # 增加最小生成token数量
     ):
         """
         Generate for one sample.

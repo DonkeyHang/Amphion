@@ -504,12 +504,12 @@ class VevoInferencePipeline:
             if not use_global_guided_inference:
                 src_speech16k = torch.cat([style_ref_speech16k, src_speech16k], dim=1)
 
-            # [1, T]
+            # [1, T] - 源语音提取VQ32内容编码
             ar_input_ids, _ = self.extract_hubert_codec(
-                self.content_tokenizer,
+                self.content_tokenizer,#使用VQ32分词器
                 src_speech16k,
                 token_type=self.ar_cfg.model.vc_input_token_type,
-                duration_reduction=True,
+                duration_reduction=True,#持续时间简化
                 duration_reduction_n_gram=getattr(
                     self.ar_cfg.model, "vc_input_reduced_n_gram", 1
                 ),
@@ -543,24 +543,27 @@ class VevoInferencePipeline:
         if use_global_guided_inference:
             prompt_output_ids = None
         else:
+            # 提取风格参考的VQ8192编码 - 这一部分是可选的吗？？？
             prompt_output_ids, _ = self.extract_hubert_codec(
-                self.content_style_tokenizer,
-                style_ref_speech16k,
+                self.content_style_tokenizer,#使用VQ8192分词器
+                style_ref_speech16k,#参考风格wav
                 duration_reduction=False,
             )
             if display_audio:
                 print("Prompt output_ids:", prompt_output_ids.shape)
 
-        # [1, T]
+        # [1, T] - 从VQ32到VQ8192的转换
         predicted_hubert_codecs = self.ar_model.generate(
-            input_ids=ar_input_ids,
-            prompt_mels=self.extract_prompt_mel_feature(style_ref_speech16k),
-            prompt_output_ids=prompt_output_ids,
+            input_ids=ar_input_ids,#VQ32的内容编码
+            prompt_mels=self.extract_prompt_mel_feature(style_ref_speech16k),#风格mel特征
+            prompt_output_ids=prompt_output_ids,#VQ8192风格提示
         )
 
         ## Diffusion ##
         timbre_ref_hubert_codecs, _ = self.extract_hubert_codec(
-            self.content_style_tokenizer, timbre_ref_speech16k, duration_reduction=False
+            self.content_style_tokenizer, #使用VQ8192分词器
+            timbre_ref_speech16k, #参考音色wav
+            duration_reduction=False
         )
         diffusion_input_codecs = torch.cat(
             [timbre_ref_hubert_codecs, predicted_hubert_codecs], dim=1
@@ -568,8 +571,8 @@ class VevoInferencePipeline:
 
         # [1, T, D]
         predict_mel_feat = self.fmt_model.reverse_diffusion(
-            cond=self.fmt_model.cond_emb(diffusion_input_codecs),
-            prompt=self.extract_mel_feature(timbre_ref_speech24k),
+            cond=self.fmt_model.cond_emb(diffusion_input_codecs),#条件编码
+            prompt=self.extract_mel_feature(timbre_ref_speech24k),#提取参考音色的melspec
             n_timesteps=flow_matching_steps,
         )
 
@@ -612,11 +615,15 @@ class VevoInferencePipeline:
         ## Diffusion ##
         #从原音频中提取内容token
         src_hubert_codecs, _ = self.extract_hubert_codec(
-            self.content_style_tokenizer, src_speech16k, duration_reduction=False
+            self.content_style_tokenizer, 
+            src_speech16k, 
+            duration_reduction=False
         )
         #从参考音色中提取音色token
         timbre_ref_hubert_codecs, _ = self.extract_hubert_codec(
-            self.content_style_tokenizer, timbre_ref_speech16k, duration_reduction=False
+            self.content_style_tokenizer, 
+            timbre_ref_speech16k, 
+            duration_reduction=False
         )
         #组合token用于FLowMatching模型的条件输入
         diffusion_input_codecs = torch.cat(
