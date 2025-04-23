@@ -253,7 +253,7 @@ class DiffLlama(LlamaModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        return_dict: Optional[bool] = False,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
 
         # retrieve some shape info
@@ -284,10 +284,6 @@ class DiffLlama(LlamaModel):
             else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
 
         seq_length_with_past = seq_length
         past_key_values_length = 0
@@ -333,7 +329,8 @@ class DiffLlama(LlamaModel):
         all_self_attns = () if output_attentions else None
         next_decoder_cache = () if use_cache else None
 
-        # 通过所有Transformer层
+        all_layer_hidden_states = []
+
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
@@ -345,7 +342,21 @@ class DiffLlama(LlamaModel):
             if self.gradient_checkpointing and self.training:
                 raise NotImplementedError
 
-            else:#每层都一次性处理整个序列
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        # None for past_key_value
+                        return module(*inputs, output_attentions, None)
+
+                    return custom_forward
+
+                layer_outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(decoder_layer),
+                    hidden_states,
+                    attention_mask,
+                    position_ids,
+                    None,
+                )
+            else:
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
@@ -357,6 +368,7 @@ class DiffLlama(LlamaModel):
                 )
 
             hidden_states = layer_outputs[0]
+            all_layer_hidden_states.append(hidden_states.clone())
 
             if use_cache:
                 next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
@@ -375,5 +387,19 @@ class DiffLlama(LlamaModel):
 
         #输出投影
         hidden_states = self.mel_out_mlp(hidden_states)
+
+        # if not return_dict:
+        #     return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
+        # return BaseModelOutputWithPast(
+        #     last_hidden_state=hidden_states,
+        #     past_key_values=next_cache,
+        #     hidden_states=all_hidden_states,
+        #     attentions=all_self_attns,
+        # )
+        if return_dict:
+            return {
+                "output": hidden_states,
+                "hidden_states": all_layer_hidden_states,
+            }
 
         return hidden_states

@@ -143,12 +143,12 @@ class RepCodec(nn.Module):
         # 整个流程
         # downsample -> encoder -> quantizer -> decoder -> upsample
 
-        # downsample
-        if self.downsample_scale != None and self.downsample_scale > 1:
-            x = x.transpose(1, 2)
-            x = self.down(x)
-            x = F.gelu(x)
-            x = x.transpose(1, 2)
+        # # downsample
+        # if self.downsample_scale != None and self.downsample_scale > 1:
+        #     x = x.transpose(1, 2)
+        #     x = self.down(x)
+        #     x = F.gelu(x)
+        #     x = x.transpose(1, 2)
 
         # encoder
         x = self.encoder(x.transpose(1, 2)).transpose(1, 2)
@@ -163,13 +163,13 @@ class RepCodec(nn.Module):
         ) = self.quantizer(x)
 
         # decoder
-        x = self.decoder(quantized_out)
+        x_rec = self.decoder(quantized_out)
 
-        # up
-        if self.downsample_scale != None and self.downsample_scale > 1:
-            x = x.transpose(1, 2)
-            x = F.interpolate(x, scale_factor=2, mode="nearest")
-            x_rec = self.up(x).transpose(1, 2)
+        # # up
+        # if self.downsample_scale != None and self.downsample_scale > 1:
+        #     x = x.transpose(1, 2)
+        #     x = F.interpolate(x, scale_factor=2, mode='nearest')
+        #     x_rec = self.up(x).transpose(1, 2)
 
         codebook_loss = (all_codebook_losses + all_commit_losses).mean()
         all_indices = all_indices
