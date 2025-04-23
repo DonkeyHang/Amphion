@@ -9,17 +9,10 @@ from huggingface_hub import snapshot_download
 from models.vc.vevo.vevo_utils import *
 
 
-def vevo_voice(content_wav_path, reference_wav_path, output_path):
-    gen_audio = inference_pipeline.inference_ar_and_fm(
-        src_wav_path=content_wav_path,
-        src_text=None,
-        style_ref_wav_path=reference_wav_path,
-        timbre_ref_wav_path=reference_wav_path,
-    )
-    save_audio(gen_audio, output_path=output_path)
 
 
-if __name__ == "__main__":
+
+def test_voiceInfer():
     # ===== Device =====
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
@@ -89,8 +82,21 @@ if __name__ == "__main__":
         device=device,
     )
 
-    content_wav_path = "./models/vc/vevo/wav/source.wav"
-    reference_wav_path = "./models/vc/vevo/wav/arabic_male.wav"
-    output_path = "./models/vc/vevo/wav/output_vevovoice.wav"
+    content_wav_path = "./models/vc/vevo/wav/arabic_male.wav"
+    reference_wav_path = "./models/vc/vevo/wav/mandarin_female.wav"
+    output_path = "./models/vc/vevo/wav/output_vevovoice_arabicM_to_mandarinW.wav"
+
+
+    def vevo_voice(content_wav_path, reference_wav_path, output_path):
+        gen_audio = inference_pipeline.inference_ar_and_fm(
+            src_wav_path=content_wav_path,
+            src_text=None,
+            style_ref_wav_path=reference_wav_path,
+            timbre_ref_wav_path=reference_wav_path,
+        )
+        save_audio(gen_audio, output_path=output_path)
+
 
     vevo_voice(content_wav_path, reference_wav_path, output_path)
+
+
