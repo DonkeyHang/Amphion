@@ -8,10 +8,11 @@ from huggingface_hub import hf_hub_download
 import safetensors
 import soundfile as sf
 
-if __name__ == "__main__":
 
+def test_maskgct():
     # build model
-    device = torch.device("cuda:0")
+    # device = torch.device("cuda:0")
+    device = torch.device("cpu")
     cfg_path = "./models/tts/maskgct/config/maskgct.json"
     cfg = load_config(cfg_path)
     # 1. build semantic model (w2v-bert-2.0)
@@ -88,3 +89,7 @@ if __name__ == "__main__":
     )
 
     sf.write(save_path, recovered_audio, 24000)
+
+
+
+

@@ -79,6 +79,29 @@ def test_ttsInfer():
     ref_text = "Flip stood undecided, his ears strained to catch the slightest sound."
 
 
+    # 添加调试输出：测试g2p处理
+    print("\n===== 调试：测试文本到音素转换 =====")
+    try:
+        print("检查vocab.json是否存在:")
+        import os
+        vocab_path = "./models/tts/maskgct/g2p/g2p/vocab.json"
+        print(f"文件存在: {os.path.exists(vocab_path)}")
+        
+        from models.vc.vevo.vevo_utils import g2p_
+        src_phonemes, src_tokens = g2p_(src_text, "en")
+        print(f"源文本: {src_text[:50]}...")
+        print(f"生成的音素: {src_phonemes[:100]}...")
+        print(f"Token IDs (前20个): {src_tokens[:20]}")
+        
+        ref_phonemes, ref_tokens = g2p_(ref_text, "en")
+        print(f"\n参考文本: {ref_text}")
+        print(f"参考音素: {ref_phonemes}")
+        print(f"参考Token IDs: {ref_tokens}")
+    except Exception as e:
+        print(f"g2p处理出错: {e}")
+        import traceback
+        traceback.print_exc()
+
     def vevo_tts(
         src_text,
         ref_wav_path,
@@ -90,19 +113,69 @@ def test_ttsInfer():
     ):
         if timbre_ref_wav_path is None:
             timbre_ref_wav_path = ref_wav_path
+        
+        # 输出调试信息
+        print(f"\n===== TTS参数 =====")
+        print(f"源语言: {src_language}")
+        print(f"参考语言: {ref_language}")
+        
+        try:
+            # 获取AR输入前的信息
+            print("\n===== AR输入前信息 =====")
+            # 这里调用g2p_但不用于实际处理，仅为调试
+            ar_test_ids = g2p_(src_text, src_language)[1]
+            print(f"预期AR输入ID长度: {len(ar_test_ids)}")
+            print(f"预期AR输入ID(前20): {ar_test_ids[:20]}")
+            
+            if ref_text:
+                ref_test_ids = g2p_(ref_text, ref_language)[1]
+                print(f"预期参考ID长度: {len(ref_test_ids)}")
+                print(f"预期参考ID(前20): {ref_test_ids[:20]}")
+                
+            # 实际处理
+            gen_audio = inference_pipeline.inference_ar_and_fm(
+                src_wav_path=None,
+                src_text=src_text,
+                style_ref_wav_path=ref_wav_path,
+                timbre_ref_wav_path=timbre_ref_wav_path,
+                style_ref_wav_text=ref_text,
+                src_text_language=src_language,
+                style_ref_wav_text_language=ref_language,
+            )
+            
+            assert output_path is not None
+            save_audio(gen_audio, output_path=output_path)
+            print(f"音频已保存到: {output_path}")
+            
+        except Exception as e:
+            print(f"TTS处理出错: {e}")
+            import traceback
+            traceback.print_exc()
 
-        gen_audio = inference_pipeline.inference_ar_and_fm(
-            src_wav_path=None,
-            src_text=src_text,
-            style_ref_wav_path=ref_wav_path,
-            timbre_ref_wav_path=timbre_ref_wav_path,
-            style_ref_wav_text=ref_text,
-            src_text_language=src_language,
-            style_ref_wav_text_language=ref_language,
-        )
+    # def vevo_tts(
+    #     src_text,
+    #     ref_wav_path,
+    #     timbre_ref_wav_path=None,
+    #     output_path=None,
+    #     ref_text=None,
+    #     src_language="en",
+    #     ref_language="en",
+    # ):
+    #     if timbre_ref_wav_path is None:
+    #         timbre_ref_wav_path = ref_wav_path
 
-        assert output_path is not None
-        save_audio(gen_audio, output_path=output_path)
+    #     gen_audio = inference_pipeline.inference_ar_and_fm(
+    #         src_wav_path=None,
+    #         src_text=src_text,
+    #         style_ref_wav_path=ref_wav_path,
+    #         timbre_ref_wav_path=timbre_ref_wav_path,
+    #         style_ref_wav_text=ref_text,
+    #         src_text_language=src_language,
+    #         style_ref_wav_text_language=ref_language,
+    #     )
+
+    #     assert output_path is not None
+    #     save_audio(gen_audio, output_path=output_path)
 
 
 

@@ -442,6 +442,10 @@ class VevoInferencePipeline:
             if style_ref_wav_text_language is None:
                 style_ref_wav_text_language = "zh"
 
+            print(f"\n===== TTS任务信息 =====")
+            print(f"源文本语言: {src_text_language}")
+            print(f"参考文本语言: {style_ref_wav_text_language}")
+
             if display_audio:
                 print("-" * 20)
                 print("Source Text: [{}]".format(src_text))
