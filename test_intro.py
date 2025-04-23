@@ -3,10 +3,10 @@
 import os
 
 #vevo
-# from models.vc.vevo.infer_vevotimbre import test_timbreInfer
+from models.vc.vevo.infer_vevotimbre import test_timbreInfer
 # from models.codec.kmeans.repcodec_model import test_RepCodec
 # from models.vc.vevo.infer_vevostyle import test_styleInfer
-# from models.vc.vevo.infer_vevotts import test_ttsInfer
+from models.vc.vevo.infer_vevotts import test_ttsInfer
 from models.vc.vevo.infer_vevovoice import test_voiceInfer
 
 # maskgct
@@ -18,7 +18,7 @@ from models.vc.vevo.infer_vevovoice import test_voiceInfer
 if __name__=="__main__":
     # ==================== vevo ====================
     # test_timbreInfer()    # vevotimbre offline done!!!
-    # test_styleInfer()     # run ok
+    # test_styleInfer()     
     test_voiceInfer()     # run ok
     # test_ttsInfer()       # bad error!!!!!
 

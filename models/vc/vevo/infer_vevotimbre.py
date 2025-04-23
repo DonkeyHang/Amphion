@@ -9,16 +9,8 @@ from huggingface_hub import snapshot_download
 from models.vc.vevo.vevo_utils import *
 
 
-def vevo_timbre(content_wav_path, reference_wav_path, output_path):
-    gen_audio = inference_pipeline.inference_fm(
-        src_wav_path=content_wav_path,
-        timbre_ref_wav_path=reference_wav_path,
-        flow_matching_steps=32,
-    )
-    save_audio(gen_audio, output_path=output_path)
 
-
-if __name__ == "__main__":
+def test_timbreInfer():
     # ===== Device =====
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
@@ -63,8 +55,19 @@ if __name__ == "__main__":
         device=device,
     )
 
-    content_wav_path = "./models/vc/vevo/wav/source.wav"
-    reference_wav_path = "./models/vc/vevo/wav/arabic_male.wav"
-    output_path = "./models/vc/vevo/wav/output_vevotimbre.wav"
+    content_wav_path = "./models/vc/vevo/wav/arabic_male.wav"
+    reference_wav_path = "./models/vc/vevo/wav/mandarin_female.wav"
+    output_path = "./models/vc/vevo/wav/output_vevotimbre_arabicM_to_mandarinW.wav"
+
+
+    def vevo_timbre(content_wav_path, reference_wav_path, output_path):
+        gen_audio = inference_pipeline.inference_fm(
+            src_wav_path=content_wav_path,
+            timbre_ref_wav_path=reference_wav_path,
+            flow_matching_steps=32,
+        )
+        save_audio(gen_audio, output_path=output_path)
+
 
     vevo_timbre(content_wav_path, reference_wav_path, output_path)
+

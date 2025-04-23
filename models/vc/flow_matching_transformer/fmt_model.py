@@ -225,18 +225,20 @@ class FlowMatchingTransformer(nn.Module):
 
         self.apply(_reset_parameters)
 
+    #欧拉积分解决了：如何从噪声到有意义的数据平滑转变，实现端到端生成过程
+    #CFG解决了：如何精确控制生成内容特定属性，使结果更接近音色目标
     @torch.no_grad()
     def reverse_diffusion(
         self,
-        cond,
-        prompt,
-        x_mask=None,
-        prompt_mask=None,
-        n_timesteps=10,
-        cfg=1.0,
-        rescale_cfg=0.75,
+        cond,                               #条件嵌入（VQ编码）
+        prompt,                             #mel
+        x_mask=None,                        #目标序列掩码   
+        prompt_mask=None,                   #参考序列掩码
+        n_timesteps=10,                     #扩散步数
+        cfg=1.0,                            #分类器自由引导强度
+        rescale_cfg=0.75,                   #引导后缩放因子
     ):
-        h = 1.0 / n_timesteps
+        h = 1.0 / n_timesteps               #积分步长
         prompt_len = prompt.shape[1]
         target_len = cond.shape[1] - prompt_len
 
@@ -247,36 +249,49 @@ class FlowMatchingTransformer(nn.Module):
                 cond.device
             )  # (B, prompt_len)
         xt_mask = torch.cat([prompt_mask, x_mask], dim=1)
+        #从高斯噪声初始化
         z = torch.randn(
             (cond.shape[0], target_len, self.mel_dim),
             dtype=cond.dtype,
             device=cond.device,
             requires_grad=False,
         )
+        #初始状态是纯噪声
         xt = z
         # t from 0 to 1: x0 = z ~ N(0, 1)
         for i in range(n_timesteps):
+            #拼接参考提示和当前生成内容
             xt_input = torch.cat([prompt, xt], dim=1)
+            #中点欧拉法 -> (i+0.5)*h
             t = (0 + (i + 0.5) * h) * torch.ones(
                 z.shape[0], dtype=z.dtype, device=z.device
             )
+            #预测向量场
             flow_pred = self.diff_estimator(xt_input, t, cond, xt_mask)
             flow_pred = flow_pred[:, prompt_len:, :]
-            # cfg
-
+            
+            # 分类器自由引导
+            # 通过有条件与无条件预测之间的差异来引导生成，而无需额外的分类器
             if cfg > 0:
+                #无条件下的预测：通过将条件向量置为0，模型生成“无条件”预测，代表生成过程中与条件无关的部分
                 uncond_flow_pred = self.diff_estimator(
                     xt, t, torch.zeros_like(cond)[:, : xt.shape[1], :], x_mask
                 )
+                #记录有条件预测的标准差
                 pos_flow_pred_std = flow_pred.std()
+                #应用CFG公式：通过放大又条件和无条件预测的差异，增强条件对生成过程的控制
                 flow_pred_cfg = flow_pred + cfg * (flow_pred - uncond_flow_pred)
+                #方差校正，防止过大偏移，为了保持预测的分布一致性
                 rescale_flow_pred = (
                     flow_pred_cfg * pos_flow_pred_std / flow_pred_cfg.std()
                 )
+                #混合原始和校正后的预测：平衡原始预测和校正预测之间的差异
                 flow_pred = (
                     rescale_cfg * rescale_flow_pred + (1 - rescale_cfg) * flow_pred_cfg
                 )
-
+            
+            #欧拉积分步骤
+            #在向量场的指导下，特征沿着预测方向移动了h个单位
             dxt = flow_pred * h
             xt = xt + dxt
 
