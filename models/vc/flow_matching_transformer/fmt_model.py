@@ -291,7 +291,7 @@ class FlowMatchingTransformer(nn.Module):
                 )
             
             #欧拉积分步骤
-            #在向量场的指导下，特征沿着预测方向移动了h个单位
+            #在向量场的指导下，特征沿着预测方向移动了预测的一个时间步
             dxt = flow_pred * h
             xt = xt + dxt
 

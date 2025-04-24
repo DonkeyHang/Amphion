@@ -14,12 +14,15 @@ from transformers.models.llama.modeling_llama import BaseModelOutputWithPast
 
 
 # sinusoidal positional encoding
+#标准的Llama使用的是正弦位置编码，这里使用的是旋转位置编码
+#主要是用于编码扩散时间步！！！0-1之间的连续值
+#生成的是独立的时间步嵌入向量，目的是区分不同阶段的扩散行为
 class SinusoidalPosEmb(nn.Module):
     def __init__(self, dim):
         super().__init__()
         self.dim = dim
 
-    def forward(self, x):
+    def forward(self, x):#接受批量的标量值x;[batchsize]
         device = x.device
         half_dim = self.dim // 2
         emb = math.log(10000) / (half_dim - 1)
@@ -32,21 +35,22 @@ class SinusoidalPosEmb(nn.Module):
 class LlamaAdaptiveRMSNorm(nn.Module):
     def __init__(self, hidden_size=1024, eps=1e-6, dim_cond=1024):
         super().__init__()
-        self.to_weight = nn.Linear(dim_cond, hidden_size)
-        nn.init.zeros_(self.to_weight.weight)
-        nn.init.ones_(self.to_weight.bias)
+        self.to_weight = nn.Linear(dim_cond, hidden_size)   #条件线性投射
+        nn.init.zeros_(self.to_weight.weight)               #初始权重0
+        nn.init.ones_(self.to_weight.bias)                  #初始偏置1
         self.variance_epsilon = eps
         self._is_hf_initialized = True  # disable automatic init
 
     def forward(self, hidden_states, cond_embedding):
         input_dtype = hidden_states.dtype
+        #标准RMSNorm部分
         variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-
+        #条件适应部分，使用条件生成动态权重（多的就是这一块儿）
         weight = self.to_weight(cond_embedding)
         if len(weight.shape) == 2:
             weight = weight.unsqueeze(1)
-
+        #动态缩放结果输出
         return (weight * hidden_states).to(input_dtype)
 
 
@@ -54,6 +58,7 @@ class LlamaNARDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: LlamaConfig, layer_idx: int):
         """Override to adaptive layer norm"""
         super().__init__(config, layer_idx)  # init attention, mlp, etc.
+        #替换标准层归一化为自适应版本
         self.input_layernorm = LlamaAdaptiveRMSNorm(
             config.hidden_size, eps=config.rms_norm_eps, dim_cond=config.hidden_size
         )
@@ -62,10 +67,11 @@ class LlamaNARDecoderLayer(LlamaDecoderLayer):
         )
 
     # add `cond` in forward function
+    #添加cond参数到forward方法中
     def forward(
         self,
         hidden_states: torch.Tensor,
-        cond_embedding: torch.Tensor,
+        cond_embedding: torch.Tensor,               #关键改动！！！添加条件嵌入
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
@@ -89,9 +95,10 @@ class LlamaNARDecoderLayer(LlamaDecoderLayer):
         """
 
         residual = hidden_states
-
+        
+        #在前向传播中使用了条件向量
         hidden_states = self.input_layernorm(
-            hidden_states, cond_embedding=cond_embedding
+            hidden_states, cond_embedding=cond_embedding#here！！！
         )
 
         # Self Attention
@@ -107,8 +114,9 @@ class LlamaNARDecoderLayer(LlamaDecoderLayer):
 
         # Fully Connected
         residual = hidden_states
+        #后续归一化也使用了条件向量
         hidden_states = self.post_attention_layernorm(
-            hidden_states, cond_embedding=cond_embedding
+            hidden_states, cond_embedding=cond_embedding#here！！！
         )
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
@@ -123,21 +131,22 @@ class LlamaNARDecoderLayer(LlamaDecoderLayer):
 
         return outputs
 
-
+#改造llama，使得输入不处理离散token序列，
+#而是输入连续melspec+扩散时间步+条件信息，输出速度场预测
 class DiffLlama(LlamaModel):
     def __init__(
         self,
-        mel_dim=100,
-        hidden_size=1024,
-        num_heads=16,
-        num_layers=16,
-        dropout=0.1,
+        mel_dim=100,            #mel特征维度
+        hidden_size=1024,       #隐层维度
+        num_heads=16,           #注意力头数
+        num_layers=16,          #解码器层数
+        dropout=0.1,            
         ffn_dropout=0.1,
         attention_dropout=0.0,
         config=LlamaConfig(0, 256, 1024, 1, 1),
     ):
         super().__init__(config)
-
+        
         self.layers = nn.ModuleList(
             [
                 LlamaNARDecoderLayer(
@@ -152,28 +161,28 @@ class DiffLlama(LlamaModel):
                 for i in range(num_layers)
             ]
         )
-
+        #自适应归一化层
         self.norm = LlamaAdaptiveRMSNorm(hidden_size, dim_cond=hidden_size)
-
+        #扩散步骤嵌入网络
         self.diff_step_embedding = SinusoidalPosEmb(hidden_size)
         self.diff_step_mlp = nn.Sequential(
             nn.Linear(hidden_size, hidden_size * 4),
             nn.SiLU(),
             nn.Linear(hidden_size * 4, hidden_size),
         )
-
+        #条件处理网络
         self.cond_mlp = nn.Sequential(
             nn.Linear(hidden_size, hidden_size * 4),
             nn.SiLU(),
             nn.Linear(hidden_size * 4, hidden_size),
         )
 
+        #mel_mlp和mel_out_mlp实现了连续特征mel与模型隐藏状态之间的转换
         self.mel_mlp = nn.Sequential(
             nn.Linear(mel_dim, hidden_size * 4),
             nn.SiLU(),
             nn.Linear(hidden_size * 4, hidden_size),
         )
-
         self.mel_out_mlp = nn.Sequential(
             nn.Linear(hidden_size, hidden_size * 4),
             nn.SiLU(),
@@ -233,6 +242,9 @@ class DiffLlama(LlamaModel):
 
         return combined_attention_mask
 
+    # 更改内容：
+    # 1. 添加了扩散时间步的嵌入
+    # 2. 无因果限制（无因果掩码），一次生成整个序列速度场
     def forward(
         self,
         x,
@@ -257,11 +269,14 @@ class DiffLlama(LlamaModel):
         cond_embedding = self.cond_mlp(cond)  # (B, T, C)
 
         # condition mel
+        # 输入处理，直接处理melspec
         x = self.mel_mlp(x)
 
         # diffusion step embedding
+        #标准LLama没有时间步概念，修改后的diffLlama将扩散时间步作为全局条件
         diffusion_step = self.diff_step_embedding(diffusion_step).to(x.device)
         diffusion_step = self.diff_step_mlp(diffusion_step)  # (B, C)
+        #条件融合
         x = x + cond_embedding
 
         inputs_embeds = x
@@ -305,6 +320,7 @@ class DiffLlama(LlamaModel):
                 dtype=torch.bool,
                 device=inputs_embeds.device,
             )
+        #非自回归设计，使用双向注意力，支持整个序列的并行处理
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask,
             (batch_size, seq_length),
@@ -325,6 +341,7 @@ class DiffLlama(LlamaModel):
 
         all_layer_hidden_states = []
 
+        #多层Transformer处理
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
@@ -358,7 +375,7 @@ class DiffLlama(LlamaModel):
                     past_key_value=past_key_value,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
-                    cond_embedding=diffusion_step,
+                    cond_embedding=diffusion_step,          #扩散时间作为条件
                 )
 
             hidden_states = layer_outputs[0]
@@ -369,7 +386,8 @@ class DiffLlama(LlamaModel):
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
-
+        
+        #最终归一化层
         hidden_states = self.norm(hidden_states, cond_embedding=diffusion_step)
 
         # add hidden states from the last decoder layer
@@ -378,6 +396,7 @@ class DiffLlama(LlamaModel):
 
         next_cache = next_decoder_cache if use_cache else None
 
+        # 输出处理，直接处理melspec
         hidden_states = self.mel_out_mlp(hidden_states)
 
         # if not return_dict:
