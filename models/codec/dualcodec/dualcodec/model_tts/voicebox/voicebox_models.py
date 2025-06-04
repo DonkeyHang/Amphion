@@ -1,16 +1,33 @@
-# Copyright (c) 2023 Amphion.
+# Copyright (c) 2025 Amphion.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
 import torch
+import numpy as np
 import torch.nn as nn
 import math
-from models.vc.flow_matching_transformer.llama_nar import DiffLlama
+from einops import rearrange
+from .llama_nar import DiffLlama
 import torch.nn.functional as F
 
 
-class FlowMatchingTransformer(nn.Module):
+def module_size(module: nn.Module, trainable_only: bool = False) -> int:
+    """
+    Calculate the total number of parameters in a PyTorch module.
+
+    Args:
+        module (nn.Module): The PyTorch module.
+        trainable_only (bool): If True, only count trainable parameters.
+
+    Returns:
+        int: Total number of parameters in the module.
+    """
+    return sum(
+        p.numel() for p in module.parameters() if not trainable_only or p.requires_grad
+    )
+
+
+class VoiceBox(nn.Module):
     def __init__(
         self,
         mel_dim=100,
@@ -27,8 +44,6 @@ class FlowMatchingTransformer(nn.Module):
         cfg=None,
     ):
         super().__init__()
-        print("check point FlowMatchingTransformer 1")
-        self.cfg = cfg
 
         mel_dim = (
             cfg.mel_dim if cfg is not None and hasattr(cfg, "mel_dim") else mel_dim
@@ -78,16 +93,16 @@ class FlowMatchingTransformer(nn.Module):
             else cond_scale_factor
         )
 
-        self.mel_dim = mel_dim#mel的维度
+        self.mel_dim = mel_dim
         self.hidden_size = hidden_size
-        self.num_layers = num_layers#Transformer层的数量
-        self.num_heads = num_heads#多头注意力的数量
-        self.cfg_scale = cfg_scale#无分类器引导缩放因子
-        self.use_cond_code = use_cond_code#离散token条件
-        self.cond_codebook_size = cond_codebook_size#条件token词汇表大小（8192）
+        self.num_layers = num_layers
+        self.num_heads = num_heads
+        self.cfg_scale = cfg_scale
+        self.use_cond_code = use_cond_code
+        self.cond_codebook_size = cond_codebook_size
         self.cond_dim = cond_dim
         self.time_scheduler = time_scheduler
-        self.sigma = sigma#扩散中噪声参数
+        self.sigma = sigma
         self.cond_scale_factor = cond_scale_factor
 
         if self.use_cond_code:
@@ -97,8 +112,6 @@ class FlowMatchingTransformer(nn.Module):
 
         self.reset_parameters()
 
-        print("check point FlowMatchingTransformer 2")
-
         self.diff_estimator = DiffLlama(
             mel_dim=mel_dim,
             hidden_size=hidden_size,
@@ -107,7 +120,6 @@ class FlowMatchingTransformer(nn.Module):
         )
 
         self.sigma = sigma
-        print("check point FlowMatchingTransformer 3")
 
     @torch.no_grad()
     def forward_diffusion(self, x, t):
@@ -229,20 +241,22 @@ class FlowMatchingTransformer(nn.Module):
 
         self.apply(_reset_parameters)
 
-    #欧拉积分解决了：如何从噪声到有意义的数据平滑转变，实现端到端生成过程
-    #CFG解决了：如何精确控制生成内容特定属性，使结果更接近音色目标
     @torch.no_grad()
     def reverse_diffusion(
         self,
-        cond,                               #条件嵌入（VQ编码）
-        prompt,                             #mel
-        x_mask=None,                        #目标序列掩码   
-        prompt_mask=None,                   #参考序列掩码
-        n_timesteps=10,                     #扩散步数
-        cfg=1.0,                            #分类器自由引导强度
-        rescale_cfg=0.75,                   #引导后缩放因子
+        cond,
+        prompt,
+        x_mask=None,
+        prompt_mask=None,
+        n_timesteps=10,
+        cfg=1.0,
+        rescale_cfg=0.75,
     ):
-        h = 1.0 / n_timesteps               #积分步长
+        h = 1.0 / n_timesteps
+
+        if prompt is None:
+            prompt = torch.zeros(cond.shape[0], 0, self.mel_dim).to(cond.device)
+
         prompt_len = prompt.shape[1]
         target_len = cond.shape[1] - prompt_len
 
@@ -253,76 +267,144 @@ class FlowMatchingTransformer(nn.Module):
                 cond.device
             )  # (B, prompt_len)
         xt_mask = torch.cat([prompt_mask, x_mask], dim=1)
-        #从高斯噪声初始化
         z = torch.randn(
             (cond.shape[0], target_len, self.mel_dim),
             dtype=cond.dtype,
             device=cond.device,
             requires_grad=False,
         )
-        #初始状态是纯噪声
         xt = z
         # t from 0 to 1: x0 = z ~ N(0, 1)
         for i in range(n_timesteps):
-            #拼接参考提示和当前生成内容
-            xt_input = torch.cat([prompt, xt], dim=1)
-            #连续轨迹上的位置，t代表了从噪声分布到数据分布的连续转换过程中特定时刻
-            # 中点欧拉法 -> (i+0.5)*h
+            xt_input = torch.cat([prompt, xt], dim=1)  # [b t c]
             t = (0 + (i + 0.5) * h) * torch.ones(
                 z.shape[0], dtype=z.dtype, device=z.device
             )
-            #预测向量场
             flow_pred = self.diff_estimator(xt_input, t, cond, xt_mask)
             flow_pred = flow_pred[:, prompt_len:, :]
-            
-            # 分类器自由引导
-            # 通过有条件与无条件预测之间的差异来引导生成，而无需额外的分类器
+            # cfg
+
             if cfg > 0:
-                #无条件下的预测：通过将条件向量置为0，模型生成“无条件”预测，代表生成过程中与条件无关的部分
                 uncond_flow_pred = self.diff_estimator(
                     xt, t, torch.zeros_like(cond)[:, : xt.shape[1], :], x_mask
                 )
-                #记录有条件预测的标准差
                 pos_flow_pred_std = flow_pred.std()
-                #应用CFG公式：通过放大又条件和无条件预测的差异，增强条件对生成过程的控制
                 flow_pred_cfg = flow_pred + cfg * (flow_pred - uncond_flow_pred)
-                #方差校正，防止过大偏移，为了保持预测的分布一致性
                 rescale_flow_pred = (
                     flow_pred_cfg * pos_flow_pred_std / flow_pred_cfg.std()
                 )
-                #混合原始和校正后的预测：平衡原始预测和校正预测之间的差异
                 flow_pred = (
                     rescale_cfg * rescale_flow_pred + (1 - rescale_cfg) * flow_pred_cfg
                 )
-            
-            #欧拉积分步骤
-            #在向量场的指导下，特征沿着预测方向移动了预测的一个时间步
+
             dxt = flow_pred * h
             xt = xt + dxt
 
         return xt
 
     def forward(self, x, x_mask, cond_code=None, cond_feature=None):
-        """
-        Args:
-            x: (B, T, mel_dim)
-            x_mask: (B, T)
-            cond_code: (B, T) if not None
-            cond_feature: (B, T, D) if not None
-        """
         if cond_code != None and self.use_cond_code:
-            cond = self.cond_emb(cond_code)
-            # TODO: use the target_len to interpolate (after cond_emb for code)
+            cond_feature = self.cond_emb(cond_code)
+        else:
+            cond_feature = self.cond_emb(cond_feature)
+        if self.cond_scale_factor != 1:
+            cond_feature = F.interpolate(
+                cond_feature.transpose(1, 2), scale_factor=self.cond_scale_factor
+            ).transpose(1, 2)
+        min_len = min(cond_feature.shape[1], x.shape[1])
+        assert x_mask.shape[1] == x.shape[1], "x_mask and x should have the same length"
+        x, x_mask, cond_feature = (
+            x[:, :min_len],
+            x_mask[:, :min_len],
+            cond_feature[:, :min_len],
+        )
 
-        elif cond_feature != None and not self.use_cond_code:
-
-            # TODO: use the target_len to interpolate
-            if self.cond_scale_factor != 1:
-                cond_feature = F.interpolate(
-                    cond_feature.transpose(1, 2), scale_factor=self.cond_scale_factor
-                ).transpose(1, 2)
-
-            cond = self.cond_emb(cond_feature)
-
-        noise, x, flow_pred, final_mask, prompt_len = self.compute_loss(x, x_mask, cond)
+        noise, x, flow_pred, final_mask, prompt_len = self.compute_loss(
+            x, x_mask, cond_feature
+        )
         return noise, x, flow_pred, final_mask, prompt_len
+
+
+def voicebox_300M():
+    model = VoiceBox(
+        mel_dim=128,
+        hidden_size=1024,
+        num_layers=16,
+        num_heads=16,
+        cfg_scale=0.2,
+        use_cond_code=True,
+        cond_codebook_size=16384,
+        cond_dim=1024,
+        cond_scale_factor=4,
+        sigma=1e-5,
+        time_scheduler="cos",
+    )
+    return model
+
+
+def extract_normalized_mel_spec_50hz(speech, device="cuda"):
+    """
+    Extract mel spectrogram from speech.
+    Args:
+        speech: (B, T)
+    Returns:
+        mel: (B, T // hop_size, num_mels)
+    """
+    from dualcodec.utils.melspec import MelSpectrogram
+
+    mel_model = MelSpectrogram(
+        sampling_rate=24000,
+        n_fft=1920,
+        num_mels=128,
+        hop_size=480,
+        win_size=1920,
+        fmin=0,
+        fmax=12000,
+    ).to(device)
+    mel_model.eval()
+    mel_feat = mel_model(speech.to(device))
+    mel_feat = mel_feat.transpose(1, 2)
+    MEL_MIN = -4.92
+    MEL_VAR = 8.14
+    mel_feat = (mel_feat - MEL_MIN) / math.sqrt(MEL_VAR)
+    mel_feat = mel_feat.transpose(1, 2)
+    return mel_feat
+
+
+def mel_spec_50hz():
+    from dualcodec.utils.melspec import MelSpectrogram
+
+    mel_model = MelSpectrogram(
+        sampling_rate=24000,
+        n_fft=1920,
+        num_mels=128,
+        hop_size=480,
+        win_size=1920,
+        fmin=0,
+        fmax=12000,
+    )
+    mel_model.eval()
+    return mel_model
+
+
+if __name__ == "__main__":
+    model = voicebox_300M()
+    size = module_size(model)
+    print(size)
+
+    # mel = torch.randn(3, 100, 128)
+    # mel_mask = torch.ones(3, 100)
+    # cond_code = torch.randint(0, 16384, (3, 25))
+    # noise, x, flow_pred, final_mask, prompt_len = model(mel, mel_mask, cond_code)
+
+    # # calculate loss
+    # final_mask = final_mask.squeeze(-1)
+
+    # flow_gt = x - (1 - model.sigma) * noise
+
+    # # use l1 loss
+    # diff_loss = F.l1_loss(
+    #     flow_pred, flow_gt, reduction="none"
+    # ).float() * final_mask.unsqueeze(-1)
+    # diff_loss = torch.mean(diff_loss, dim=2).sum() / final_mask.sum()
+    # print(diff_loss)

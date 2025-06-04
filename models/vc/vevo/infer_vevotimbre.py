@@ -9,30 +9,10 @@ from huggingface_hub import snapshot_download
 from models.vc.vevo.vevo_utils import *
 
 
+
 def test_timbreInfer():
-        # ===== Device =====
-    # device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-    # device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
-    device = torch.device("cpu")
-    print("now device is : ", device)
-    print("check point test_timbreInfer 1")
-
-
-    # ========== function inference pipeline=============
-    # def vevo_timbre(content_wav_path, reference_wav_path, output_path):
-    #     print("check point vevo_timbre 1")
-    #     gen_audio = inference_pipeline.inference_fm(
-    #         src_wav_path=content_wav_path,
-    #         timbre_ref_wav_path=reference_wav_path,
-    #         flow_matching_steps=32,
-    #     )
-    #     print("check point vevo_timbre 2")
-    #     save_audio(gen_audio, output_path=output_path)
-    #     print("check point vevo_timbre 3")
-    #==================================
-
-
-
+    # ===== Device =====
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     # ===== Content-Style Tokenizer =====
     local_dir = snapshot_download(
@@ -98,4 +78,19 @@ def test_timbreInfer():
     # ====== inference finish ======
     print("check point test_timbreInfer finished!!!")
 
+    content_wav_path = "./models/vc/vevo/wav/arabic_male.wav"
+    reference_wav_path = "./models/vc/vevo/wav/mandarin_female.wav"
+    output_path = "./models/vc/vevo/wav/output_vevotimbre_arabicM_to_mandarinW.wav"
+
+
+    def vevo_timbre(content_wav_path, reference_wav_path, output_path):
+        gen_audio = inference_pipeline.inference_fm(
+            src_wav_path=content_wav_path,
+            timbre_ref_wav_path=reference_wav_path,
+            flow_matching_steps=32,
+        )
+        save_audio(gen_audio, output_path=output_path)
+
+
+    vevo_timbre(content_wav_path, reference_wav_path, output_path)
 

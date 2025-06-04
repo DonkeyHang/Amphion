@@ -8,9 +8,13 @@ from huggingface_hub import snapshot_download
 
 from models.vc.vevo.vevo_utils import *
 
+
+
+
+
 def test_voiceInfer():
-    # device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-    device = "cpu"
+    # ===== Device =====
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     # ===== Content Tokenizer =====
     local_dir = snapshot_download(

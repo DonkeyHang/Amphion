@@ -237,9 +237,9 @@ class AutoregressiveTransformer(nn.Module):
     @torch.no_grad()
     def generate(
         self,
-        input_ids,
-        prompt_mels=None,
-        prompt_output_ids=None,
+        input_ids,                  #输入id序列[1，T]
+        prompt_mels=None,           #输入mel特征[1，T，n_mels]
+        prompt_output_ids=None,     #可选的输出提示
         max_length=2000,
         temperature=0.8,
         top_k=50,
@@ -266,7 +266,7 @@ class AutoregressiveTransformer(nn.Module):
             input_ids,
             _,
             _,
-        ) = self.padding_for_input(
+        ) = self.padding_for_input(#为输入添加特殊标记（BOS和EOS）
             input_ids,
             torch.ones_like(input_ids),
             self.input_eos_token_id,
@@ -287,15 +287,16 @@ class AutoregressiveTransformer(nn.Module):
         if self.use_global_style_encoder:
             # When using global style encoder, prompt_mels is required
             assert prompt_mels is not None
-
+            #获取输入嵌入
             input_emb = self.model.model.embed_tokens(input_ids)
+            #提取全局风格嵌入
             global_style_emb = self.global_encoder(
                 prompt_mels,
                 torch.ones_like(prompt_mels[:, :, 0]).to(prompt_mels.device),
             ).unsqueeze(1)
-
+            #组合所有嵌入
             llama_input_emb = torch.cat([input_emb, global_style_emb], dim=1)
-
+            #如果有输出提示，那也加入
             if prompt_output_ids is not None:
                 prompt_output_emb = self.model.model.embed_tokens(prompt_output_ids)
                 llama_input_emb = torch.cat([llama_input_emb, prompt_output_emb], dim=1)
@@ -303,24 +304,24 @@ class AutoregressiveTransformer(nn.Module):
             input_length = llama_input_emb.shape[1]
 
             gen_tokens = self.model.generate(
-                inputs_embeds=llama_input_emb,
-                do_sample=True,
+                inputs_embeds=llama_input_emb,              #
+                do_sample=True,                             #采用采样而非贪婪解码
                 max_length=max_length,
                 pad_token_id=self.pad_token_id,
                 eos_token_id=self.output_eos_token_id,
-                temperature=temperature,
-                top_k=top_k,
-                top_p=top_p,
-                repetition_penalty=repeat_penalty,
-                min_new_tokens=min_new_tokens,
+                temperature=temperature,                    #控制采样随机性，默认0.8
+                top_k=top_k,                                #只考虑概率最高的k个token，默认50
+                top_p=top_p,                                #使用nucleus sampling，默认0.9
+                repetition_penalty=repeat_penalty,          #惩罚重复的token，默认1.0
+                min_new_tokens=min_new_tokens,              #确保生成的最小长度
             )
         else:
             # When not using global style encoder, prompt_output_ids is required
             assert prompt_output_ids is not None
-
+            #链接输入id和输出提示id
             llama_input_ids = torch.cat([input_ids, prompt_output_ids], dim=-1)
             input_length = llama_input_ids.shape[1]
-
+            #生成token
             gen_tokens = self.model.generate(
                 llama_input_ids,
                 do_sample=True,
@@ -333,9 +334,9 @@ class AutoregressiveTransformer(nn.Module):
                 repetition_penalty=repeat_penalty,
                 min_new_tokens=min_new_tokens,
             )
-
+            #只保留新生成的标记
             gen_tokens = gen_tokens[:, input_length:]
-
+        #移除特殊标记（如果有）
         if gen_tokens[:, 0] == self.output_bos_token_id:
             gen_tokens = gen_tokens[:, 1:]
         if gen_tokens[:, -1] == self.output_eos_token_id:
