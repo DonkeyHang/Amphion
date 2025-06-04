@@ -262,7 +262,8 @@ class FlowMatchingTransformer(nn.Module):
         for i in range(n_timesteps):
             #拼接参考提示和当前生成内容
             xt_input = torch.cat([prompt, xt], dim=1)
-            #中点欧拉法 -> (i+0.5)*h
+            #连续轨迹上的位置，t代表了从噪声分布到数据分布的连续转换过程中特定时刻
+            # 中点欧拉法 -> (i+0.5)*h
             t = (0 + (i + 0.5) * h) * torch.ones(
                 z.shape[0], dtype=z.dtype, device=z.device
             )

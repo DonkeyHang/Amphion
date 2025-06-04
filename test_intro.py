@@ -19,8 +19,8 @@ if __name__=="__main__":
     # ==================== vevo ====================
     # test_timbreInfer()    # vevotimbre offline done!!!
     # test_styleInfer()     
-    test_voiceInfer()     # run ok
-    # test_ttsInfer()       # bad error!!!!!
+    # test_voiceInfer()     # run ok
+    test_ttsInfer()       # bad error!!!!!
 
     # ==================== maskgct ==================
     # test_maskgct()        # debug not successful
